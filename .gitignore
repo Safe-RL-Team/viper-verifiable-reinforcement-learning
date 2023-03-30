@@ -62,3 +62,5 @@ typings/
 
 # This repo uses yarn
 package-lock.json
+
+public/
