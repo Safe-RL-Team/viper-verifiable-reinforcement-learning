@@ -1,0 +1,26 @@
+{
+	"title": "Distill Example",
+	"description": "An example project using Webpack, Babel, and Svelte.",
+	"authors": [
+		{
+			"author": "Christoph Pröschel",
+			"authorURL": "https://chrismati.cz/",
+			"affiliation": "TU Berlin",
+			"affiliationURL": "https://www.tu.berlin/"
+		}
+	],
+	"katex": {
+		"delimiters": [
+			{
+				"left": "$",
+				"right": "$",
+				"display": false
+			},
+			{
+				"left": "$$",
+				"right": "$$",
+				"display": true
+			}
+		]
+	}
+}

@@ -1,0 +1,192 @@
+<!doctype html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style id="distill-article-specific-styles">
+        <%=require("../static/styles.css") %>
+    </style>
+    <script src="https://distill.pub/template.v2.js"></script>
+</head>
+
+<body>
+
+<d-front-matter>
+    <script type="text/json">
+      <%= JSON.stringify(require("./frontmatter.json"), null, 4) %>
+    </script>
+</d-front-matter>
+
+<d-title>
+    <h1>Viper</h1>
+    <p>Verifiable Reinforcement Learning via Policy Extraction</p>
+</d-title>
+
+<d-article>
+
+    <p>
+        While deep reinforcement learning has been shown to be effective in a variety of domains, it suffers from
+        the same problems as other machine learning methods: it is difficult to interpret and it is difficult to
+        guarantee that it is behaving correctly. In this article I present my efforts in reproducing the results of the
+        paper
+        "Viper: Verifiable Reinforcement Learning via Policy Extraction"
+        <d-cite key="viper"></d-cite>
+        by <a href="https://obastani.github.io/">Osbert Bastani</a> et al.
+
+        In particular, I will answer the following questions with a focus on actual implementation rather than theory:
+    <ul>
+        <li>How to distill a Deep RL agent into a decision tree?</li>
+        <li>How to verify that it never loses?</li>
+    </ul>
+    </p>
+
+    <p>The code accompanying this article can be found <a
+                href="https://github.com/Safe-RL-Team/viper-verifiable-rl-impl">here</a>.</p>
+
+    <h2>Background</h2>
+
+    <p>
+        As Reinforcement Learning is increasingly used in safety-critical domains, it is important to be able to
+        verify that the agent is behaving correctly. This is especially important in domains where the agent is
+        interacting with the real world, such as self-driving cars, air traffic control, and robotics. The difference
+        between
+        these applications and say, playing a game of Go, is that in the real-world scenarios the cost of failure is
+        much higher perhaps even unacceptable. So while there are approaches that aim to teach RL agents safe behavior
+        by for instance [TODO add and cite examples] we would optimally like to be able to demonstrate that our agent
+        never fails.
+    </p>
+    <p>
+        Even though there is work (cite katz) on verifying Deep Reinforcement Learning agents the process is complicated
+        by the complexity of the computation graph of a neural network. Instead, we will first train a Deep RL agent and
+        then
+        distill it into a decision tree using imitation learning. This decision tree can then be verified using a SAT
+        solver.
+    </p>
+
+    <h2>Training the oracle</h2>
+
+    <p>
+        As we will see later in order for our verification algorithm to work we need to have a functional description of
+        the state dynamics f(s) of our environment. While the authors are also able to verify other properties such as
+        robustness on environments where that is not the case such as Atari Pong, we will here only focus on the <code>Toy
+            Pong</code> environment where we can easily compute the state dynamics.
+    </p>
+
+    <p>
+        The environment is a one player version of the Atari Pong where the player controls a paddle and the opponent is
+        simply a wall. The paddle can move left or right and the ball bounces off the walls and the paddle.
+        The goal is to keep the ball in play for as long as possible.
+        We can describe the state of the environment at timestep t with the following vector:
+    </p>
+
+    <d-math block=""> s_t \= (x_p, x_b, y_b, v_x, v_y)</d-math>
+    <ul>
+        <li>
+            <d-math>x_p</d-math>
+            horizontal position of the paddle
+        </li>
+        <li>
+            <d-math>x_b</d-math>
+            x coordinate of the ball
+        </li>
+        <li>
+            <d-math>y_b</d-math>
+            y coordinate of the ball
+        </li>
+        <li>
+            <d-math>v_x</d-math>
+            x velocity of the ball
+        </li>
+        <li>
+            <d-math>v_y</d-math>
+            y velocity of the ball
+        </li>
+    </ul>
+
+    <figure>
+        <img class="figure-content" src="/images/toy_pong_init.png" style="width: 50%">
+        <figcaption class="caption-centered">
+            The ToyPong environment at timestep 0
+        </figcaption>
+    </figure>
+    <p>
+        The ball starts at the center of the screen and is initialized with a random velocity
+        in both the x and the y direction with a magnitude between 1 and 2. The paddle starts at the center bottom of
+        the
+        screen and can be controlled via the actions <code>{left, right, stay}</code>.
+        The speed of the paddle is not given so I initially assumed it to be 1. However, after some experimentation I
+        quickly learned that this makes the game impossible to play perfectly as there are many cases where the ball is
+        too
+        fast to catch no matter what the controller does. A quick calculation shows that the paddle's speed needs to be
+        at least 1.5.
+    </p>
+
+    <figure>
+        <img class="figure-content" src="/images/toy_pong_impossible.gif" style="width: 40%">
+    </figure>
+
+    <p>
+        Having the <a href="https://github.com/Safe-RL-Team/viper-verifiable-rl-impl/blob/main/gym_env/toy_pong.py">environment
+            setup</a> we now would like to train an oracle that can play the game perfectly. While the
+        authors used a generic policy gradient
+        for training a DNN policy I decided to go directly for the stable baselines 3 <a
+                href="https://stable-baselines3.readthedocs.io/en/master/modules/ppo.html">PPO</a> implementation as it
+        is a good starter for Deep RL. Usually it is enough in RL for an agent to achieve a very high reward so training
+        even this state-of-the-art algorithm to play <i>perfectly</i>
+        <d-footnote id="d-footnote-1">Here perfectly only means that the agent achieves the highest reward possible
+            (r=250) averaged over 50 rollouts. Unlike the decision tree we are extracting it might still lose given
+            certain edge cases.
+        </d-footnote>
+        turned out to be surprisingly difficult. The key hyperparameter that made it work in the end was using a
+        learning rate that would decay linearly after half the training was complete.
+    </p>
+
+    <h2>VIPER</h2>
+
+    <p>
+        One naive way of approaching the distillation challenge would be to train our decision tree to predict the
+        action of the oracle given the states of all trajectories in the training set. This, however, turns out to yield poor
+        results because the decision tree is not able to generalize to unseen states. This is because mo matter how good our
+        action classification accuracy is on the training set, the decision tree will likely end up
+        in a state where it has never seen before. This is especially true for stochastic environments. In order to
+        address this
+        problem
+    </p>
+
+    <p>Explain the development of Dagger and its drawbacks</p>
+
+    <h2>Verifying Correctness</h2>
+
+    <h2>Conclusion</h2>
+
+</d-article>
+
+
+<d-appendix>
+    <h3>Acknowledgments</h3>
+    <p>
+        We are deeply grateful to...
+    </p>
+
+    <p>
+        Many of our diagrams are based on...
+    </p>
+
+    <h3>Author Contributions</h3>
+    <p>
+        <b>Research:</b> Alex developed ...
+    </p>
+
+    <p>
+        <b>Writing & Diagrams:</b> The text was initially drafted by...
+    </p>
+
+
+    <d-footnote-list></d-footnote-list>
+    <d-citation-list></d-citation-list>
+</d-appendix>
+
+<!-- bibliography will be inlined during Distill pipeline's pre-rendering -->
+<d-bibliography src="bibliography.bib"></d-bibliography>
+
+</body>
