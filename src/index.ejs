@@ -14,6 +14,9 @@
 <d-front-matter>
     <script type="text/json">
       <%= JSON.stringify(require("./frontmatter.json"), null, 4) %>
+
+
+
     </script>
 </d-front-matter>
 
@@ -56,7 +59,9 @@
         never fails.
     </p>
     <p>
-        Even though there is work (cite katz) on verifying Deep Reinforcement Learning agents the process is complicated
+        Even though there is work
+        <d-cite key="katz"></d-cite>
+        on verifying Deep Reinforcement Learning agents the process is complicated
         by the complexity of the computation graph of a neural network. Instead, we will first train a Deep RL agent and
         then
         distill it into a decision tree using imitation learning. This decision tree can then be verified using a SAT
@@ -104,7 +109,7 @@
     </ul>
 
     <figure>
-        <img class="figure-content" src="/images/toy_pong_init.png" style="width: 50%">
+        <img class="figure-content" src="images/toy_pong_init.png" style="width: 50%">
         <figcaption class="caption-centered">
             The ToyPong environment at timestep 0
         </figcaption>
@@ -122,7 +127,7 @@
     </p>
 
     <figure>
-        <img class="figure-content" src="/images/toy_pong_impossible.gif" style="width: 40%">
+        <img class="figure-content" src="images/toy_pong_impossible.gif" style="width: 40%">
     </figure>
 
     <p>
@@ -145,15 +150,43 @@
 
     <p>
         One naive way of approaching the distillation challenge would be to train our decision tree to predict the
-        action of the oracle given the states of all trajectories in the training set. This, however, turns out to yield poor
-        results because the decision tree is not able to generalize to unseen states. This is because mo matter how good our
+        action of the oracle given the states of all trajectories in the training set. This, however, turns out to yield
+        poor
+        results because the decision tree is not able to generalize to unseen states. This is because mo matter how good
+        our
         action classification accuracy is on the training set, the decision tree will likely end up
-        in a state where it has never seen before. This is especially true for stochastic environments. In order to
-        address this
-        problem
+        in a state where it has never seen before. This is especially true for stochastic environments. DAgger
+        <d-cite
+                key="dagger"></d-cite>
+        is a method that addresses this problem by letting the decision tree play on its own
+        and then retrieving the actions from the oracle and adding them to the training set. This process is repeated
+        until the decision tree is able to play the game perfectly.
     </p>
 
-    <p>Explain the development of Dagger and its drawbacks</p>
+    <p>The VIPER algorithm is based on DAgger but adds one important insight: Not all states in a game are equally
+        important its outcome.
+        In the figure below for instance we can see that on the left side the ball is moving away from the paddle so
+        the next action is not consequential for the overall return. On the right side however it is crucial for the
+        paddle to move to the right in order to keep the ball in play. We can use this insight to weight state action pairs
+        by their importance for the overall return. But how do we know which states are critical and which are not?
+    </p>
+
+    <figure>
+        <img class="figure-content" src="images/critical_states.png">
+        <figcaption class="caption-centered">
+            The state on the left is not critical for the overall return while the state on the right is. Adapted from Bastani et al.<d-cite key="viper"></d-cite>
+        </figcaption>
+    </figure>
+
+    <p>
+        For this we can leverage the Q-function of the oracle. Remember: The Q-function is a function that maps a state and an
+        action to the expected return of taking that action in that state. Now imagine suppose we have a set of q-values
+        for a given state and the best possible action has a q-value that is very close to the worst possible action. In
+        that case we can be pretty sure that the best action is not critical for the overall return. On the other hand if
+        the difference is very high then making the wrong choice could have disastrous consequences.
+    </p>
+
+    <p>If we now weight the samples that are trained in each iteration of VIPER</p>
 
     <h2>Verifying Correctness</h2>
 
