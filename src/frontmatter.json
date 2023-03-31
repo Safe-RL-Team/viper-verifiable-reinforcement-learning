@@ -1,26 +1,26 @@
 {
-	"title": "Distill Example",
-	"description": "An example project using Webpack, Babel, and Svelte.",
-	"authors": [
-		{
-			"author": "Christoph Pröschel",
-			"authorURL": "https://chrismati.cz/",
-			"affiliation": "TU Berlin",
-			"affiliationURL": "https://www.tu.berlin/"
-		}
-	],
-	"katex": {
-		"delimiters": [
-			{
-				"left": "$",
-				"right": "$",
-				"display": false
-			},
-			{
-				"left": "$$",
-				"right": "$$",
-				"display": true
-			}
-		]
-	}
+  "title": "Viper - Verifiable Reinforcement Learning via Policy Extraction",
+  "description": "This article covers my implementation of the Viper algorithm, a method for verifying reinforcement learning policies. It is based on the paper \"Viper: Verifiable Reinforcement Learning via Policy Extraction\" by Bastani et al.",
+  "authors": [
+    {
+      "author": "Christoph Pröschel",
+      "authorURL": "https://chrismati.cz/",
+      "affiliation": "TU Berlin",
+      "affiliationURL": "https://www.tu.berlin/"
+    }
+  ],
+  "katex": {
+    "delimiters": [
+      {
+        "left": "$",
+        "right": "$",
+        "display": false
+      },
+      {
+        "left": "$$",
+        "right": "$$",
+        "display": true
+      }
+    ]
+  }
 }

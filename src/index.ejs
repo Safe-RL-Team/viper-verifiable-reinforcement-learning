@@ -34,10 +34,6 @@
 
 
 
-
-
-
-
     </script>
 </d-front-matter>
 
@@ -51,16 +47,14 @@
     <p>
         While deep reinforcement learning has been shown to be effective in a variety of domains, it suffers from
         the same problems as other machine learning methods: it is difficult to interpret and it is difficult to
-        guarantee that it is behaving correctly. In this article I present my efforts in reproducing the results of the
-        paper
-        "Viper: Verifiable Reinforcement Learning via Policy Extraction"
+        guarantee that it is behaving correctly. In this article, I present my efforts in reproducing the results of the
+        paper "Verifiable Reinforcement Learning via Policy Extraction"
         <d-cite key="viper"></d-cite>
         by <a href="https://obastani.github.io/">Osbert Bastani</a> et al.
-
-        In particular, I will answer the following questions with a focus on actual implementation rather than theory:
+        In particular, I will answer the following questions:
     <ul>
-        <li>How to distill a Deep RL agent into a decision tree?</li>
-        <li>How to verify that it never loses?</li>
+        <li><a href="#viper">How to distill a Deep RL agent into a decision tree?<a></a></li>
+        <li><a href="#verification">How to verify that it never loses?</a></li>
     </ul>
     </p>
 
@@ -70,14 +64,12 @@
     <h2>Background</h2>
 
     <p>
-        As Reinforcement Learning is increasingly used in safety-critical domains, it is important to be able to
+        Reinforcement Learning is gaining increasing importance in safety-critical domains, necessitating the ability to
         verify that the agent is behaving correctly. This is especially important in domains where the agent is
-        interacting with the real world, such as self-driving cars, air traffic control, and robotics. The difference
-        between
-        these applications and say, playing a game of Go, is that in the real-world scenarios the cost of failure is
-        much higher perhaps even unacceptable. So while there are approaches that aim to teach RL agents safe behavior
-        by for instance [TODO add and cite examples] we would optimally like to be able to demonstrate that our agent
-        never fails.
+        interacting with the real world, such as self-driving cars, air traffic control, and robotics. Unlike playing a
+        game of Go, failure in these real-world scenarios can incur significantly higher perhaps even unacceptable
+        costs. So while there are approaches that aim to teach RL agents safe behavior we would optimally like to be
+        able to demonstrate that our agent never fails.
     </p>
     <p>
         Even though there is work
@@ -85,20 +77,20 @@
         on verifying Deep Reinforcement Learning agents the process is complicated
         by the complexity of the computation graph of a neural network. Instead, we will first train a Deep RL agent and
         then distill it into a decision tree (DT) using imitation learning. This decision tree can then be verified
-        using a SAT solver.
+        using an SAT solver.
     </p>
 
     <h2>Training the oracle</h2>
 
     <p>
-        As we will see later in order for our verification algorithm to work we need to have a functional description of
+        As we will see later for our verification algorithm to work we need to have a functional description of
         the state dynamics f(s) of our environment. While the authors are also able to verify other properties such as
-        robustness on environments where that is not the case such as Atari Pong, we will here only focus on the <code>Toy
+        robustness in environments where that is not the case such as Atari Pong, we will here only focus on the <code>Toy
             Pong</code> environment where we can easily compute the state dynamics.
     </p>
 
     <p>
-        The environment is a one player version of the Atari Pong where the player controls a paddle and the opponent is
+        The environment is a one-player version of the Atari Pong where the player controls a paddle and the opponent is
         simply a wall. The paddle can move left or right and the ball bounces off the walls and the paddle.
         The goal is to keep the ball in play for as long as possible.
         We can describe the state of the environment at timestep t with the following vector:
@@ -139,7 +131,7 @@
         in both the x and the y direction with a magnitude between 1 and 2. The paddle starts at the center bottom of
         the
         screen and can be controlled via the actions <code>{left, right, stay}</code>.
-        The speed of the paddle is not given so I initially assumed it to be 1. However, after some experimentation I
+        The speed of the paddle is not given, so I initially assumed it to be 1. However, after some experimentation, I
         quickly learned that this makes the game impossible to play perfectly as there are many cases where the ball is
         too
         fast to catch no matter what the controller does. A quick calculation shows that the paddle's speed needs to be
@@ -152,7 +144,7 @@
 
     <p>
         Having the <a href="https://github.com/Safe-RL-Team/viper-verifiable-rl-impl/blob/main/gym_env/toy_pong.py">environment
-            setup</a> we now would like to train an oracle that can play the game perfectly. While the
+        </a> set up we now would like to train an oracle that can play the game perfectly. While the
         authors used a generic policy gradient
         for training a DNN policy I decided to go directly for the stable baselines 3 <a
                 href="https://stable-baselines3.readthedocs.io/en/master/modules/ppo.html">PPO</a> implementation as it
@@ -166,7 +158,7 @@
         learning rate that would decay linearly after half the training was complete.
     </p>
 
-    <h2>🐍 VIPER</h2>
+    <h2 id="viper">🐍 VIPER</h2>
 
     <p>
         One naive way of approaching the distillation challenge would be to train our decision tree to predict the
@@ -178,14 +170,15 @@
         in a state where it has never seen before. This is especially true for stochastic environments. DAgger
         <d-cite
                 key="dagger"></d-cite>
-        is a method that addresses this problem by letting the decision tree play on its own
-        and then retrieving the actions from the oracle and adding them to the training set. This process is repeated
-        until the decision tree is able to play the game perfectly.
+        is an algorithm that solves this by letting the decision tree play on its own
+        and then retrieving the correct actions from the oracle and adding them to the training set. This process is
+        repeated
+        as often as necessary yielding an ever expanding training set.
     </p>
 
     <p>The VIPER algorithm is based on DAgger but adds one important insight: Not all states in a game are equally
         important its outcome.
-        In the figure below for instance we can see that on the left side the ball is moving away from the paddle so
+        In the figure below for instance we can see that on the left side, the ball is moving away from the paddle so
         the next action is not consequential for the overall return. On the right side however it is crucial for the
         paddle to move to the right in order to keep the ball in play. We can use this insight to weight state action
         pairs
@@ -195,23 +188,23 @@
     <figure>
         <img class="figure-content" src="images/critical_states.png">
         <figcaption class="caption-centered">
-            The state on the left is not critical for the overall return while the state on the right is. Adapted from
+            The state on the left is not critical for the overall return while the state on the right is. Adapted
+            from
             Bastani et al.
             <d-cite key="viper"></d-cite>
         </figcaption>
     </figure>
 
     <p>
-        For this we can leverage the Q-function of the oracle
+        For this, we can leverage the Q-function of the oracle
         <d-math>\pi^*</d-math>
         . Remember: The Q-function is a function that maps a state
-        and an
-        action to the expected return of taking that action in that state. Now imagine suppose we have a set of q-values
+        and an action to the expected return of taking that action in that state. Now suppose we have a set of q-values
         for a given state and the best possible action has a q-value that is very close to the worst possible action. In
-        that case we can be pretty sure that the best action is not critical for the overall return. On the other hand
-        if
-        the difference is very high then making the wrong choice could have disastrous consequences. We can now weight
-        every single sample in our training set using this loss:
+        that case, we can be pretty sure that the best action is not critical for the overall return because no matter
+        which action we pick expected return will not change much. On the other hand if the difference is very high then
+        making the wrong choice could have disastrous consequences. We can now use this to weigh every sample in
+        our training set with this expression:
     </p>
 
     <style>
@@ -286,13 +279,14 @@
 
         for i in range(args.n_iter):
             # Beta controls if we use the oracle or the decision tree
-            # Use the
+            # Use the oracle only for the first iteration
             beta = 1 if i == 0 else 0
             dataset += sample_trajectory(args, policy, beta)
 
             # Train a scikit-learn decision tree on the growing dataset
             clf = DecisionTreeClassifier(ccp_alpha=0.0001,
-                                         criterion="entropy", max_depth=args.max_depth,
+                                         criterion="entropy",
+                                         max_depth=args.max_depth,
                                          max_leaf_nodes=args.max_leaves)
             x = np.array([traj[0] for traj in dataset])
             y = np.array([traj[1] for traj in dataset])
@@ -300,17 +294,15 @@
 
             clf.fit(x, y, sample_weight=weight)
 
-            # The current policy is the one that will be used to sample the next trajectory
+            # The current policy is the one that will
+            # be used to sample the next trajectory
             policy = clf
             policies.append(clf)
 
-            mean_reward, std_reward = evaluate_policy(policy, env, n_eval_episodes=100)
-            if args.verbose == 2:
-                print(f"Policy score: {mean_reward:0.4f} +/- {std_reward:0.4f}")
+            mean_reward = evaluate_policy(policy, env)
             rewards.append(mean_reward)
 
         # Retain the best policy over all runs
-        print(f"Viper iteration complete. Dataset size: {len(dataset)}")
         best_policy = policies[np.argmax(rewards)]
         path = get_viper_path(args)
         print(f"Best policy:\t{np.argmax(rewards)}")
@@ -321,8 +313,8 @@
         to note:</p>
 
     <ul>
-        <li>The only specification w.r.t. to the the tree classifier in the paper is that they use the CART algorithm. I
-            found that the default gini coefficient performs slightly worse than splitting based on entropy.
+        <li>The only specification w.r.t. to the tree classifier in the paper is that they use the CART algorithm. I
+            found the default Gini coefficient to perform slightly worse than splitting based on entropy.
         </li>
         <li>For ToyPong my tree ended up much larger than the one reported by the authors (587 vs 61 leaf nodes). I only
             later realized that in their setup the x position of the ball is likely randomized which would lead to a
@@ -336,15 +328,94 @@
     <p>VIPER extends DAgger with the q-sampling trick but it also changes the training schedule by only letting the
         oracle play in the first iteration while DAgger gradually reduces the participation of the oracle in each run.
         It is thus very easy to modify the above code to work like DAgger and I was able to verify that both changes
-        lead to a better performance.
+        lead to better performance.
     </p>
 
-    <h2>Verifying Correctness</h2>
+    <h2 id="verification">Verifying Correctness</h2>
 
     <p>We now have a DNN policy and a decision tree that both achieve a maximum reward on our ToyPong game. Now we want
-        to verify that there is no edge case that makes </p>
+        to verify that there is no edge case that would make our controller lose. This was the hardest part of the
+        implementation
+        and to show why it will help to have a look at the relevant section of the paper:
+    </p>
 
-    <h2>Reflection</h2>
+    <figure>
+        <img class="figure-content" src="images/verification_paper.png">
+        <figcaption class="caption-centered">
+            Excerpt from the paper
+            <d-cite key="viper"></d-cite>
+        </figcaption>
+    </figure>
+
+    <p>
+        So the idea is that because the joint dynamics $f_{\pi}(s)$ are piecewise linear function we can use the <a
+                href="https://en.wikipedia.org/wiki/Linear_programming">linear programming</a> algorithm to find
+        exceptions to an equation that says that after at most $ t_{max} $ timesteps we always end up in a safe state $
+        Y_0 $. To better understand the point about the piecewise linearity you can look at the figure below. Decision
+        trees partition their input space into regions and each region is associated with a leaf node, i.e. action. The
+        same can be said for the state dynamics which would for instance tell you that within the box the ball keeps
+        moving while at each wall it bounces back. So if you come up with the right partitioning you
+        can essentially write the joint dynamics as $f_{\pi}(s) = \beta_i^T s$ where each $\beta_i$ is a vector that
+        encodes the next state of the system using the controller and system dynamics. Each $ \phi_t $ in the above
+        program then captures the fact that if we are in one of the state partitions the transition to the next state
+        will
+        be governed by the corresponding $\beta_i$
+        <d-footnote id="d-footnote-1">A sharp-eyed reader might have already spotted
+            a mistake in the $ \phi_t $ expression: While the paper specifies a disjunction over the state partitions
+            this would
+            make the expression <b>trivially true</b> because we are already not in all states but one. Instead it has
+            to be a conjunction
+            which my experiments confirm.
+        </d-footnote>
+        .
+    </p>
+
+    <figure>
+        <img class="figure-content" src="images/joint_dynamics.png">
+        <figcaption class="caption-centered">
+            If the state dynamics are piecewise linear we can write the joint dynamics as a linear combination of the
+            dynamics and the predicted action for each leaf node
+            <d-cite key="viper"></d-cite>
+        </figcaption>
+    </figure>
+
+    <p><b>But how do you programmatically build the correct partition and $ \beta $ from the decision tree?</b> At first
+        this question seemed stunningly hard to me until I realized that there is a straight-forward solution that was
+        probably
+        cut from the paper since it would have only complicated the equations. The trick is to split each expression in
+        $ \phi_t $ into a controller and a system part. The controller part only controls $ s_t[0] $, i.e. the paddle
+        and the
+        system equations, which have to be specified manually, the rest.
+    </p>
+
+    <p>
+        The full correctness check then comes out at less than 300 lines of code with comments. It uses the theorem
+        prover
+        <a href="https://github.com/Z3Prover/z3">z3</a> to show that the $ \neg \psi $ is unsatisfiable, i.e. there is
+        no
+        counter example to the safety property. Since my decision tree is considerably larger than the one in the paper
+        the check takes about 38 seconds to run on my 2021 M1 MacBook Pro.
+    </p>
+
+    <h2>Reflections</h2>
+
+    <p>
+        The authors of the paper set out and deliver on the very ambitious goal of building a controller that does not only
+        prioritize safety but in fact guarantees it. They also verify other safety properties such as stability and
+        robustness
+        on more environments that were not covered here. However, their verification approach requires the very strong
+        assumption
+        that we have the precise system dynamics as a piecewise linear function. In addition to that the environments
+        are simple enough that we can train a perfect oracle policy that can be distilled into a decision tree.
+        It is therefore an open question what the boundaries of this approach are, i.e. at what point is the difference
+        in DNN policy and DT just big enough so that we cannot get a perfect DT?
+    </p>
+
+    <p>
+        Overall, I greatly enjoyed studying and implementing this paper. The idea of extracting a DT from a DNN policy
+        also has interesting implications for explainable RL agents (if the DT is small enough) and it would be interesting
+        to see if this approach can be extended to more complex environments.
+    </p>
 
 </d-article>
 
