@@ -17,6 +17,27 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     </script>
 </d-front-matter>
 
@@ -63,9 +84,8 @@
         <d-cite key="katz"></d-cite>
         on verifying Deep Reinforcement Learning agents the process is complicated
         by the complexity of the computation graph of a neural network. Instead, we will first train a Deep RL agent and
-        then
-        distill it into a decision tree using imitation learning. This decision tree can then be verified using a SAT
-        solver.
+        then distill it into a decision tree (DT) using imitation learning. This decision tree can then be verified
+        using a SAT solver.
     </p>
 
     <h2>Training the oracle</h2>
@@ -84,7 +104,7 @@
         We can describe the state of the environment at timestep t with the following vector:
     </p>
 
-    <d-math block=""> s_t \= (x_p, x_b, y_b, v_x, v_y)</d-math>
+    <d-math block=""> s_t = (x_p, x_b, y_b, v_x, v_y)</d-math>
     <ul>
         <li>
             <d-math>x_p</d-math>
@@ -146,7 +166,7 @@
         learning rate that would decay linearly after half the training was complete.
     </p>
 
-    <h2>VIPER</h2>
+    <h2>🐍 VIPER</h2>
 
     <p>
         One naive way of approaching the distillation challenge would be to train our decision tree to predict the
@@ -167,53 +187,169 @@
         important its outcome.
         In the figure below for instance we can see that on the left side the ball is moving away from the paddle so
         the next action is not consequential for the overall return. On the right side however it is crucial for the
-        paddle to move to the right in order to keep the ball in play. We can use this insight to weight state action pairs
+        paddle to move to the right in order to keep the ball in play. We can use this insight to weight state action
+        pairs
         by their importance for the overall return. But how do we know which states are critical and which are not?
     </p>
 
     <figure>
         <img class="figure-content" src="images/critical_states.png">
         <figcaption class="caption-centered">
-            The state on the left is not critical for the overall return while the state on the right is. Adapted from Bastani et al.<d-cite key="viper"></d-cite>
+            The state on the left is not critical for the overall return while the state on the right is. Adapted from
+            Bastani et al.
+            <d-cite key="viper"></d-cite>
         </figcaption>
     </figure>
 
     <p>
-        For this we can leverage the Q-function of the oracle. Remember: The Q-function is a function that maps a state and an
+        For this we can leverage the Q-function of the oracle
+        <d-math>\pi^*</d-math>
+        . Remember: The Q-function is a function that maps a state
+        and an
         action to the expected return of taking that action in that state. Now imagine suppose we have a set of q-values
         for a given state and the best possible action has a q-value that is very close to the worst possible action. In
-        that case we can be pretty sure that the best action is not critical for the overall return. On the other hand if
-        the difference is very high then making the wrong choice could have disastrous consequences.
+        that case we can be pretty sure that the best action is not critical for the overall return. On the other hand
+        if
+        the difference is very high then making the wrong choice could have disastrous consequences. We can now weight
+        every single sample in our training set using this loss:
     </p>
 
-    <p>If we now weight the samples that are trained in each iteration of VIPER</p>
+    <style>
+        .eq-grid {
+            display: grid;
+            justify-content: start;
+            grid-row-gap: 10px;
+        }
+
+        .eq-grid figcaption d-math {
+            font-size: 100%;
+        }
+
+        .eq-grid .expansion-marker {
+            border: 1px solid #CCC;
+            border-bottom: none;
+            height: .5em;
+            width: 100%;
+        }
+    </style>
+
+    <figure class="eq-grid">
+
+        <figcaption style="grid-row: 1; grid-column: 2/5; text-align: center">
+            The "criticalness" of the state.
+        </figcaption>
+
+        <div class="expansion-marker" style="grid-row: 2; grid-column: 2 / 5;"></div>
+
+        <div style="grid-row: 3; grid-column: 1;">
+            <d-math> \tilde{\ell}(s_t) ~~~=~~~~</d-math>
+        </div>
+        <div style="grid-row: 3; grid-column: 2;">
+            <d-math>[V_t^{(\pi^*)}</d-math>
+        </div>
+        <div style="grid-row: 3; grid-column: 3;">
+            <d-math> ~~~-~~~</d-math>
+        </div>
+        <div style="grid-row: 3; grid-column: 4;">
+            <d-math> \min_{a \in A}Q_t^{(\pi^*)}(s, a)]</d-math>
+        </div>
+        <div style="grid-row: 3; grid-column: 5;">
+            <d-math>~~~ \mathbb{I}\left[\pi(s) \neq \pi^*(s)\right]</d-math>
+        </div>
+
+
+        <figcaption style="grid-row: 4; grid-column: 2; max-width:135px; ">
+            The maximum q-value
+        </figcaption>
+        <figcaption style="grid-row: 4; grid-column: 4; max-width:120px;">
+            the minimum q-value
+        </figcaption>
+        <figcaption style="grid-row: 4; grid-column: 5; max-width:120px; text-align: center">
+            the classifier 0-1 loss
+        </figcaption>
+
+    </figure>
+
+    <p>The sample weights can be obtained directly from our stable baselines oracle policy <a
+                href="https://github.com/Safe-RL-Team/viper-verifiable-rl-impl/blob/main/train/viper.py#L114">like
+            so</a>. Now we have all the components to build and analyze the VIPER algorithm. The code below is a
+        simplified snippet from the <a
+                href="https://github.com/Safe-RL-Team/viper-verifiable-rl-impl/blob/main/train/viper.py#L19">repository</a>
+        with comments to explain each step:
+    </p>
+
+    <d-code block="" language="python">
+        dataset = []
+        policy = None
+        policies = []
+        rewards = []
+
+        for i in range(args.n_iter):
+            # Beta controls if we use the oracle or the decision tree
+            # Use the
+            beta = 1 if i == 0 else 0
+            dataset += sample_trajectory(args, policy, beta)
+
+            # Train a scikit-learn decision tree on the growing dataset
+            clf = DecisionTreeClassifier(ccp_alpha=0.0001,
+                                         criterion="entropy", max_depth=args.max_depth,
+                                         max_leaf_nodes=args.max_leaves)
+            x = np.array([traj[0] for traj in dataset])
+            y = np.array([traj[1] for traj in dataset])
+            weight = np.array([traj[2] for traj in dataset])
+
+            clf.fit(x, y, sample_weight=weight)
+
+            # The current policy is the one that will be used to sample the next trajectory
+            policy = clf
+            policies.append(clf)
+
+            mean_reward, std_reward = evaluate_policy(policy, env, n_eval_episodes=100)
+            if args.verbose == 2:
+                print(f"Policy score: {mean_reward:0.4f} +/- {std_reward:0.4f}")
+            rewards.append(mean_reward)
+
+        # Retain the best policy over all runs
+        print(f"Viper iteration complete. Dataset size: {len(dataset)}")
+        best_policy = policies[np.argmax(rewards)]
+        path = get_viper_path(args)
+        print(f"Best policy:\t{np.argmax(rewards)}")
+        print(f"Mean reward:\t{np.max(rewards):0.4f}")
+    </d-code>
+
+    <p>While I was able to train a decision tree to play perfectly on both CartPole and ToyPong there are a few things
+        to note:</p>
+
+    <ul>
+        <li>The only specification w.r.t. to the the tree classifier in the paper is that they use the CART algorithm. I
+            found that the default gini coefficient performs slightly worse than splitting based on entropy.
+        </li>
+        <li>For ToyPong my tree ended up much larger than the one reported by the authors (587 vs 61 leaf nodes). I only
+            later realized that in their setup the x position of the ball is likely randomized which would lead to a
+            much more diverse dataset and thus prevents overfitting.
+        </li>
+        <li>Pruning helps limit the tree size and can even improve performance as it regularizes the tree.</li>
+    </ul>
+
+    <h3>Differences to DAgger</h3>
+
+    <p>VIPER extends DAgger with the q-sampling trick but it also changes the training schedule by only letting the
+        oracle play in the first iteration while DAgger gradually reduces the participation of the oracle in each run.
+        It is thus very easy to modify the above code to work like DAgger and I was able to verify that both changes
+        lead to a better performance.
+    </p>
 
     <h2>Verifying Correctness</h2>
 
-    <h2>Conclusion</h2>
+    <p>We now have a DNN policy and a decision tree that both achieve a maximum reward on our ToyPong game. Now we want
+        to verify that there is no edge case that makes </p>
+
+    <h2>Reflection</h2>
 
 </d-article>
 
 
 <d-appendix>
-    <h3>Acknowledgments</h3>
-    <p>
-        We are deeply grateful to...
-    </p>
-
-    <p>
-        Many of our diagrams are based on...
-    </p>
-
-    <h3>Author Contributions</h3>
-    <p>
-        <b>Research:</b> Alex developed ...
-    </p>
-
-    <p>
-        <b>Writing & Diagrams:</b> The text was initially drafted by...
-    </p>
-
 
     <d-footnote-list></d-footnote-list>
     <d-citation-list></d-citation-list>
