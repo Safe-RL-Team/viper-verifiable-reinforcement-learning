@@ -34,6 +34,7 @@
 
 
 
+
     </script>
 </d-front-matter>
 
@@ -177,7 +178,7 @@
     </p>
 
     <p>The VIPER algorithm is based on DAgger but adds one important insight: Not all states in a game are equally
-        important its outcome.
+        important to its outcome.
         In the figure below for instance we can see that on the left side, the ball is moving away from the paddle so
         the next action is not consequential for the overall return. On the right side however it is crucial for the
         paddle to move to the right in order to keep the ball in play. We can use this insight to weight state action
@@ -202,8 +203,9 @@
         and an action to the expected return of taking that action in that state. Now suppose we have a set of q-values
         for a given state and the best possible action has a q-value that is very close to the worst possible action. In
         that case, we can be pretty sure that the best action is not critical for the overall return because no matter
-        which action we pick expected return will not change much. On the other hand if the difference is very high then
-        making the wrong choice could have disastrous consequences. We can now use this to weigh every sample in
+        which action we pick the expected return will not change much. On the other hand if the difference is very high
+        then
+        making the wrong choice could have disastrous consequences. We can now use this to weight every sample in
         our training set with this expression:
     </p>
 
@@ -278,29 +280,29 @@
         rewards = []
 
         for i in range(args.n_iter):
-            # Beta controls if we use the oracle or the decision tree
-            # Use the oracle only for the first iteration
-            beta = 1 if i == 0 else 0
-            dataset += sample_trajectory(args, policy, beta)
+        # Beta controls if we use the oracle or the decision tree
+        # Use the oracle only for the first iteration
+        beta = 1 if i == 0 else 0
+        dataset += sample_trajectory(args, policy, beta)
 
-            # Train a scikit-learn decision tree on the growing dataset
-            clf = DecisionTreeClassifier(ccp_alpha=0.0001,
-                                         criterion="entropy",
-                                         max_depth=args.max_depth,
-                                         max_leaf_nodes=args.max_leaves)
-            x = np.array([traj[0] for traj in dataset])
-            y = np.array([traj[1] for traj in dataset])
-            weight = np.array([traj[2] for traj in dataset])
+        # Train a scikit-learn decision tree on the growing dataset
+        clf = DecisionTreeClassifier(ccp_alpha=0.0001,
+        criterion="entropy",
+        max_depth=args.max_depth,
+        max_leaf_nodes=args.max_leaves)
+        x = np.array([traj[0] for traj in dataset])
+        y = np.array([traj[1] for traj in dataset])
+        weight = np.array([traj[2] for traj in dataset])
 
-            clf.fit(x, y, sample_weight=weight)
+        clf.fit(x, y, sample_weight=weight)
 
-            # The current policy is the one that will
-            # be used to sample the next trajectory
-            policy = clf
-            policies.append(clf)
+        # The current policy is the one that will
+        # be used to sample the next trajectory
+        policy = clf
+        policies.append(clf)
 
-            mean_reward = evaluate_policy(policy, env)
-            rewards.append(mean_reward)
+        mean_reward = evaluate_policy(policy, env)
+        rewards.append(mean_reward)
 
         # Retain the best policy over all runs
         best_policy = policies[np.argmax(rewards)]
@@ -325,9 +327,9 @@
 
     <h3>Differences to DAgger</h3>
 
-    <p>VIPER extends DAgger with the q-sampling trick but it also changes the training schedule by only letting the
+    <p>VIPER extends DAgger with the q-sampling trick, but it also changes the training schedule by only letting the
         oracle play in the first iteration while DAgger gradually reduces the participation of the oracle in each run.
-        It is thus very easy to modify the above code to work like DAgger and I was able to verify that both changes
+        It is thus very easy to modify the above code to work like DAgger, and I was able to verify that both changes
         lead to better performance.
     </p>
 
@@ -350,7 +352,7 @@
     <p>
         So the idea is that because the joint dynamics $f_{\pi}(s)$ are piecewise linear function we can use the <a
                 href="https://en.wikipedia.org/wiki/Linear_programming">linear programming</a> algorithm to find
-        exceptions to an equation that says that after at most $ t_{max} $ timesteps we always end up in a safe state $
+        exceptions to an equation that says that after at most $ t_{max} $ time steps we always end up in a safe state $
         Y_0 $. To better understand the point about the piecewise linearity you can look at the figure below. Decision
         trees partition their input space into regions and each region is associated with a leaf node, i.e. action. The
         same can be said for the state dynamics which would for instance tell you that within the box the ball keeps
@@ -363,9 +365,8 @@
         <d-footnote id="d-footnote-1">A sharp-eyed reader might have already spotted
             a mistake in the $ \phi_t $ expression: While the paper specifies a disjunction over the state partitions
             this would
-            make the expression <b>trivially true</b> because we are already not in all states but one. Instead it has
-            to be a conjunction
-            which my experiments confirm.
+            make the expression <b>trivially true</b> because we are already not in all states but one. Instead, it has
+            to be a conjunction which my experiments confirm.
         </d-footnote>
         .
     </p>
@@ -380,41 +381,41 @@
     </figure>
 
     <p><b>But how do you programmatically build the correct partition and $ \beta $ from the decision tree?</b> At first
-        this question seemed stunningly hard to me until I realized that there is a straight-forward solution that was
+        this question seemed stunningly hard until I realized that there is a straight-forward solution that was
         probably
         cut from the paper since it would have only complicated the equations. The trick is to split each expression in
-        $ \phi_t $ into a controller and a system part. The controller part only controls $ s_t[0] $, i.e. the paddle
-        and the
-        system equations, which have to be specified manually, the rest.
+        $ \phi_t $ into a controller and a system part. The controller part only controls $ s_t[0] $, i.e. the paddle,
+        and the system equations, which have to be specified manually, the rest.
     </p>
 
     <p>
         The full correctness check then comes out at less than 300 lines of code with comments. It uses the theorem
         prover
         <a href="https://github.com/Z3Prover/z3">z3</a> to show that the $ \neg \psi $ is unsatisfiable, i.e. there is
-        no
-        counter example to the safety property. Since my decision tree is considerably larger than the one in the paper
+        no counter example to the safety property. Since my decision tree is considerably larger than the one in the
+        paper
         the check takes about 38 seconds to run on my 2021 M1 MacBook Pro.
     </p>
 
     <h2>Reflections</h2>
 
     <p>
-        The authors of the paper set out and deliver on the very ambitious goal of building a controller that does not only
+        The authors of the paper set out and deliver on the very ambitious goal of building a controller that does not
+        only
         prioritize safety but in fact guarantees it. They also verify other safety properties such as stability and
         robustness
         on more environments that were not covered here. However, their verification approach requires the very strong
-        assumption
-        that we have the precise system dynamics as a piecewise linear function. In addition to that the environments
+        assumption that we have the precise system dynamics as a piecewise linear function. In addition to that the
+        environments
         are simple enough that we can train a perfect oracle policy that can be distilled into a decision tree.
         It is therefore an open question what the boundaries of this approach are, i.e. at what point is the difference
-        in DNN policy and DT just big enough so that we cannot get a perfect DT?
+        in DNN policy and DT just big enough so that we cannot distill a perfect DT?
     </p>
 
     <p>
         Overall, I greatly enjoyed studying and implementing this paper. The idea of extracting a DT from a DNN policy
-        also has interesting implications for explainable RL agents (if the DT is small enough) and it would be interesting
-        to see if this approach can be extended to more complex environments.
+        also has interesting implications for explainable RL agents (if the DT is small enough) and it would be
+        interesting to see if this approach can be extended to more complex environments.
     </p>
 
 </d-article>
